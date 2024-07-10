@@ -39,11 +39,21 @@ def add_geotag(image_data, lat, lng):
         st.error(f"An error occurred while adding geotag: {e}")
         return None
 
+def convert_png_to_jpeg(image_data):
+    try:
+        image = Image.open(BytesIO(image_data))
+        with BytesIO() as output:
+            image.convert("RGB").save(output, format="JPEG")
+            return output.getvalue()
+    except Exception as e:
+        st.error(f"An error occurred while converting PNG to JPEG: {e}")
+        return None
+
 def main():
     st.title("Geotag Image App")
     st.write("Upload images and add coordinates to geotag them.")
 
-    uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg","png"], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
     if uploaded_files:
         lat = st.number_input("Enter latitude:", format="%.6f")
         lng = st.number_input("Enter longitude:", format="%.6f")
@@ -53,10 +63,15 @@ def main():
             with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zip_file:
                 for uploaded_file in uploaded_files:
                     uploaded_file.seek(0)
-                    geotagged_image = add_geotag(uploaded_file.read(), lat, lng)
-                    if geotagged_image:
-                        zip_file.writestr(uploaded_file.name, geotagged_image)
-                        st.image(geotagged_image, caption=f'Geotagged Image: {uploaded_file.name}', use_column_width=True)
+                    file_data = uploaded_file.read()
+                    if uploaded_file.type == "image/png":
+                        file_data = convert_png_to_jpeg(file_data)
+                    
+                    if file_data:
+                        geotagged_image = add_geotag(file_data, lat, lng)
+                        if geotagged_image:
+                            zip_file.writestr(uploaded_file.name.rsplit(".", 1)[0] + ".jpg", geotagged_image)
+                            st.image(geotagged_image, caption=f'Geotagged Image: {uploaded_file.name}', use_column_width=True)
 
             st.download_button(
                 label="Download All Geotagged Images",
