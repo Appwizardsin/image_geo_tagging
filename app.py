@@ -9,10 +9,9 @@ def convert_to_rational(number):
     f = float(number)
     sign = -1 if f < 0 else 1
     f = abs(f)
-    degrees = int(f)
-    minutes = int((f - degrees) * 60)
-    seconds = round((f - degrees - minutes / 60) * 3600 * 1000)
-    return [(degrees * sign, 1), (minutes, 1), (seconds, 1000)]
+    numerator = int(f * 10000)
+    denominator = 10000
+    return (numerator * sign, denominator)
 
 def add_geotag(image_data, lat, lng):
     try:
@@ -22,10 +21,10 @@ def add_geotag(image_data, lat, lng):
         zeroth_ifd = {piexif.ImageIFD.Make: u"Make"}
         exif_ifd = {piexif.ExifIFD.UserComment: b"Comment"}
         gps_ifd = {
-            piexif.GPSIFD.GPSLatitudeRef: 'N' if lat[0][0] >= 0 else 'S',
-            piexif.GPSIFD.GPSLatitude: lat,
-            piexif.GPSIFD.GPSLongitudeRef: 'E' if lng[0][0] >= 0 else 'W',
-            piexif.GPSIFD.GPSLongitude: lng,
+            piexif.GPSIFD.GPSLatitudeRef: 'N' if lat[0] >= 0 else 'S',
+            piexif.GPSIFD.GPSLatitude: ((abs(lat[0]), lat[1]), (0, 1), (0, 1)),
+            piexif.GPSIFD.GPSLongitudeRef: 'E' if lng[0] >= 0 else 'W',
+            piexif.GPSIFD.GPSLongitude: ((abs(lng[0]), lng[1]), (0, 1), (0, 1)),
         }
 
         exif_dict = {"0th": zeroth_ifd, "Exif": exif_ifd, "GPS": gps_ifd}
@@ -39,21 +38,11 @@ def add_geotag(image_data, lat, lng):
         st.error(f"An error occurred while adding geotag: {e}")
         return None
 
-def convert_png_to_jpeg(image_data):
-    try:
-        image = Image.open(BytesIO(image_data))
-        with BytesIO() as output:
-            image.convert("RGB").save(output, format="JPEG")
-            return output.getvalue()
-    except Exception as e:
-        st.error(f"An error occurred while converting PNG to JPEG: {e}")
-        return None
-
 def main():
     st.title("Geotag Image App")
     st.write("Upload images and add coordinates to geotag them.")
 
-    uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg"], accept_multiple_files=True)
     if uploaded_files:
         lat = st.number_input("Enter latitude:", format="%.6f")
         lng = st.number_input("Enter longitude:", format="%.6f")
@@ -63,15 +52,10 @@ def main():
             with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zip_file:
                 for uploaded_file in uploaded_files:
                     uploaded_file.seek(0)
-                    file_data = uploaded_file.read()
-                    if uploaded_file.type == "image/png":
-                        file_data = convert_png_to_jpeg(file_data)
-                    
-                    if file_data:
-                        geotagged_image = add_geotag(file_data, lat, lng)
-                        if geotagged_image:
-                            zip_file.writestr(uploaded_file.name.rsplit(".", 1)[0] + ".jpg", geotagged_image)
-                            st.image(geotagged_image, caption=f'Geotagged Image: {uploaded_file.name}', use_column_width=True)
+                    geotagged_image = add_geotag(uploaded_file.read(), lat, lng)
+                    if geotagged_image:
+                        zip_file.writestr(uploaded_file.name, geotagged_image)
+                        st.image(geotagged_image, caption=f'Geotagged Image: {uploaded_file.name}', use_column_width=True)
 
             st.download_button(
                 label="Download All Geotagged Images",
